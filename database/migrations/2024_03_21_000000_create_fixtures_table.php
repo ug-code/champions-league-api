@@ -10,6 +10,7 @@ return new class extends Migration
     {
         Schema::create('fixtures', function (Blueprint $table) {
             $table->id();
+            $table->integer('week');
             $table->foreignId('home_team_id')->constrained('teams');
             $table->foreignId('away_team_id')->constrained('teams');
             $table->integer('home_goals')->nullable();

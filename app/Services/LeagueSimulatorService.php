@@ -4,20 +4,31 @@ namespace App\Services;
 
 use App\Models\Team;
 use App\Models\MatchGame;
+use Illuminate\Support\Collection;
 
 class LeagueSimulatorService {
-    public array $teams = [];
+    public Collection $teams;
     public array $fixtures = [];
 
     public function __construct($teams) {
-        $this->teams = $teams;
+        $this->teams = $teams instanceof Collection ? $teams : collect($teams);
     }
 
     public function generateFixtures() {
-        $n = count($this->teams);
+        $n = $this->teams->count();
         $rounds = [];
-        $teams = $this->teams;
-        if ($n % 2 !== 0) $teams[] = new Team('Bay', 0);
+        
+        // Takımları array'e çevir
+        $teams = $this->teams->values()->all();
+        
+        // Bay takımı oluştur
+        if ($n % 2 !== 0) {
+            $bayTeam = new Team();
+            $bayTeam->name = 'Bay';
+            $bayTeam->power = 0;
+            $teams[] = $bayTeam;
+        }
+        
         $totalRounds = (count($teams) - 1) * 2;
         $matchesPerRound = count($teams) / 2;
 
@@ -27,8 +38,10 @@ class LeagueSimulatorService {
                 $homeIdx = ($round + $i) % (count($teams) - 1);
                 $awayIdx = (count($teams) - 1 - $i + $round) % (count($teams) - 1);
                 if ($i === 0) $awayIdx = count($teams) - 1;
+                
                 $home = $teams[$homeIdx];
                 $away = $teams[$awayIdx];
+                
                 if ($round < $totalRounds / 2) {
                     $roundMatches[] = new MatchGame($home, $away);
                 } else {
@@ -54,10 +67,10 @@ class LeagueSimulatorService {
         $match->played = true;
         $match->home->played++;
         $match->away->played++;
-        $match->home->goalsFor += $homeGoals;
-        $match->home->goalsAgainst += $awayGoals;
-        $match->away->goalsFor += $awayGoals;
-        $match->away->goalsAgainst += $homeGoals;
+        $match->home->goals_for += $homeGoals;
+        $match->home->goals_against += $awayGoals;
+        $match->away->goals_for += $awayGoals;
+        $match->away->goals_against += $homeGoals;
         if ($homeGoals > $awayGoals) {
             $match->home->won++;
             $match->home->points += 3;
@@ -95,18 +108,14 @@ class LeagueSimulatorService {
     }
 
     public function getStandings() {
-        $teams = $this->teams;
-        usort($teams, function($a, $b) {
-            if ($b->points !== $a->points) return $b->points - $a->points;
-            if ($b->goalDifference() !== $a->goalDifference()) return $b->goalDifference() - $a->goalDifference();
-            return $b->goalsFor - $a->goalsFor;
-        });
-        return $teams;
+        return $this->teams->sortByDesc(function($team) {
+            return [$team->points, $team->goalDifference(), $team->goals_for];
+        })->values();
     }
 
     public function getChampionshipPredictions($weeksLeft) {
         $standings = $this->getStandings();
-        $maxPoint = $standings[0]->points;
+        $maxPoint = $standings->first()->points;
         $predictions = [];
         foreach ($standings as $team) {
             if ($weeksLeft === 0) {
@@ -125,11 +134,10 @@ class LeagueSimulatorService {
     }
 
     public static function fromArray($arr) {
-        $teams = array_map(fn($t) => Team::fromArray($t), $arr['teams']);
-        $teamMap = [];
-        foreach ($teams as $t) {
-            $teamMap[$t->name] = $t;
-        }
+        $teams = collect($arr['teams'])->map(function($t) {
+            return Team::fromArray($t);
+        });
+        $teamMap = $teams->keyBy('name');
         $sim = new LeagueSimulatorService($teams);
         $fixtures = [];
         if (isset($arr['fixtures'])) {
@@ -153,7 +161,7 @@ class LeagueSimulatorService {
 
     public function toArray() {
         return [
-            'teams' => array_map(fn($t) => $t->toArray(), $this->teams),
+            'teams' => $this->teams->map(fn($t) => $t->toArray())->toArray(),
             'fixtures' => array_map(fn($w) => array_map(fn($m) => $m->toArray(), $w), $this->fixtures),
         ];
     }

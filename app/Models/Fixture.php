@@ -7,6 +7,7 @@ use Illuminate\Database\Eloquent\Model;
 class Fixture extends Model
 {
     protected $fillable = [
+        'week',
         'home_team_id',
         'away_team_id',
         'home_goals',
@@ -15,7 +16,10 @@ class Fixture extends Model
     ];
 
     protected $casts = [
-        'played' => 'boolean'
+        'played' => 'boolean',
+        'home_goals' => 'integer',
+        'away_goals' => 'integer',
+        'week' => 'integer'
     ];
 
     public function homeTeam()

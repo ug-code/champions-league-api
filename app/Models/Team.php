@@ -28,6 +28,17 @@ class Team extends Model
         'goals_against' => 0
     ];
 
+    protected $casts = [
+        'power' => 'integer',
+        'points' => 'integer',
+        'played' => 'integer',
+        'won' => 'integer',
+        'drawn' => 'integer',
+        'lost' => 'integer',
+        'goals_for' => 'integer',
+        'goals_against' => 'integer'
+    ];
+
     public function homeFixtures()
     {
         return $this->hasMany(Fixture::class, 'home_team_id');
@@ -59,6 +70,7 @@ class Team extends Model
     public function toArray()
     {
         return [
+            'id' => $this->id,
             'name' => $this->name,
             'power' => $this->power,
             'points' => $this->points,

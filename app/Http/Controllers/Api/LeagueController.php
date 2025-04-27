@@ -7,6 +7,7 @@ use App\Models\Team;
 use App\Models\MatchGame;
 use App\Services\LeagueSimulatorService;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 
 class LeagueController extends Controller
 {
@@ -32,92 +33,218 @@ class LeagueController extends Controller
     }
 
     public function addTeam(Request $request) {
-        $state = $this->loadState();
         $name = $request->input('name');
         $power = (int) $request->input('power');
+        
         $team = new Team();
         $team->name = $name;
         $team->power = $power;
-        $state['teams'][] = $team->toArray();
-        $state['fixturesGenerated'] = false;
-        $this->saveState($state);
-        return response()->json(['success' => true, 'teams' => $state['teams']]);
+        $team->save();
+        
+        return response()->json(['success' => true, 'teams' => Team::all()]);
     }
 
     public function getTeams() {
-        $state = $this->loadState();
-        return response()->json(['teams' => $state['teams']]);
+        return response()->json(['teams' => Team::all()]);
     }
 
     public function generateFixtures() {
-        $state = $this->loadState();
-        $teams = array_map(fn($t) => Team::fromArray($t), $state['teams']);
+        // Önceki fikstürleri sil
+        DB::table('fixtures')->truncate();
+        
+        // Takımları sıfırla
+        Team::query()->update([
+            'points' => 0,
+            'played' => 0,
+            'won' => 0,
+            'drawn' => 0,
+            'lost' => 0,
+            'goals_for' => 0,
+            'goals_against' => 0
+        ]);
+        
+        $teams = Team::all();
         $sim = new LeagueSimulatorService($teams);
         $sim->generateFixtures();
-        $state['simulator'] = $sim->toArray();
-        $state['fixturesGenerated'] = true;
-        $this->saveState($state);
+        
+        // Fikstürleri veritabanına kaydet
+        DB::transaction(function() use ($sim) {
+            foreach ($sim->fixtures as $weekIndex => $week) {
+                foreach ($week as $match) {
+                    DB::table('fixtures')->insert([
+                        'week' => $weekIndex + 1,
+                        'home_team_id' => $match->home->id,
+                        'away_team_id' => $match->away->id,
+                        'home_goals' => $match->homeGoals,
+                        'away_goals' => $match->awayGoals,
+                        'played' => $match->played,
+                        'created_at' => now(),
+                        'updated_at' => now()
+                    ]);
+                }
+            }
+        });
+        
         return response()->json(['fixtures' => $sim->toArray()['fixtures']]);
     }
 
     public function simulateWeek(Request $request) {
-        $state = $this->loadState();
-        if (empty($state['fixturesGenerated']) || !$state['simulator']) {
-            return response()->json(['error' => 'Fikstür oluşturulmadı'], 400);
-        }
         $week = (int) $request->input('week');
-        $sim = LeagueSimulatorService::fromArray($state['simulator']);
-        $sim->simulateWeek($week);
-        $state['simulator'] = $sim->toArray();
-        $this->saveState($state);
-        return response()->json(['fixtures' => $sim->toArray()['fixtures']]);
+        
+        // Haftanın maçlarını getir
+        $fixtures = DB::table('fixtures')
+            ->where('week', $week)
+            ->where('played', false)
+            ->get();
+            
+        if ($fixtures->isEmpty()) {
+            return response()->json(['error' => 'Bu hafta için oynanmamış maç bulunamadı'], 400);
+        }
+        
+        $teams = Team::all();
+        $sim = new LeagueSimulatorService($teams);
+        
+        // Maçları simüle et
+        foreach ($fixtures as $fixture) {
+            $homeTeam = $teams->firstWhere('id', $fixture->home_team_id);
+            $awayTeam = $teams->firstWhere('id', $fixture->away_team_id);
+            
+            $match = new MatchGame($homeTeam, $awayTeam);
+            $sim->simulateMatch($match);
+            
+            // Maç sonucunu veritabanına kaydet
+            DB::table('fixtures')
+                ->where('id', $fixture->id)
+                ->update([
+                    'home_goals' => $match->homeGoals,
+                    'away_goals' => $match->awayGoals,
+                    'played' => true,
+                    'updated_at' => now()
+                ]);
+                
+            // Takım istatistiklerini güncelle
+            $homeTeam->save();
+            $awayTeam->save();
+        }
+        
+        // Tüm fikstürü haftalara göre gruplandırarak getir
+        $allFixtures = DB::table('fixtures')
+            ->orderBy('week')
+            ->get()
+            ->groupBy('week')
+            ->map(function($weekFixtures) use ($teams) {
+                return $weekFixtures->map(function($fixture) use ($teams) {
+                    $homeTeam = $teams->firstWhere('id', $fixture->home_team_id);
+                    $awayTeam = $teams->firstWhere('id', $fixture->away_team_id);
+                    
+                    return [
+                        'home' => [
+                            'name' => $homeTeam->name,
+                            'power' => $homeTeam->power,
+                            'points' => $homeTeam->points,
+                            'played' => $homeTeam->played,
+                            'won' => $homeTeam->won,
+                            'drawn' => $homeTeam->drawn,
+                            'lost' => $homeTeam->lost,
+                            'goalsFor' => $homeTeam->goals_for,
+                            'goalsAgainst' => $homeTeam->goals_against
+                        ],
+                        'away' => [
+                            'name' => $awayTeam->name,
+                            'power' => $awayTeam->power,
+                            'points' => $awayTeam->points,
+                            'played' => $awayTeam->played,
+                            'won' => $awayTeam->won,
+                            'drawn' => $awayTeam->drawn,
+                            'lost' => $awayTeam->lost,
+                            'goalsFor' => $awayTeam->goals_for,
+                            'goalsAgainst' => $awayTeam->goals_against
+                        ],
+                        'homeGoals' => $fixture->home_goals,
+                        'awayGoals' => $fixture->away_goals,
+                        'played' => $fixture->played
+                    ];
+                })->values()->all();
+            })->values()->all();
+        
+        return response()->json(['fixtures' => $allFixtures]);
     }
 
     public function simulateAll() {
-        $state = $this->loadState();
-        if (empty($state['fixturesGenerated']) || !$state['simulator']) {
-            return response()->json(['error' => 'Fikstür oluşturulmadı'], 400);
+        $teams = Team::all();
+        $sim = new LeagueSimulatorService($teams);
+        
+        // Tüm oynanmamış maçları getir
+        $fixtures = DB::table('fixtures')
+            ->where('played', false)
+            ->get();
+            
+        if ($fixtures->isEmpty()) {
+            return response()->json(['error' => 'Oynanmamış maç bulunamadı'], 400);
         }
-        $sim = LeagueSimulatorService::fromArray($state['simulator']);
-        $sim->simulateAll();
-        $state['simulator'] = $sim->toArray();
-        $this->saveState($state);
-        return response()->json(['fixtures' => $sim->toArray()['fixtures']]);
+        
+        // Maçları simüle et
+        foreach ($fixtures as $fixture) {
+            $homeTeam = $teams->firstWhere('id', $fixture->home_team_id);
+            $awayTeam = $teams->firstWhere('id', $fixture->away_team_id);
+            
+            $match = new MatchGame($homeTeam, $awayTeam);
+            $sim->simulateMatch($match);
+            
+            // Maç sonucunu veritabanına kaydet
+            DB::table('fixtures')
+                ->where('id', $fixture->id)
+                ->update([
+                    'home_goals' => $match->homeGoals,
+                    'away_goals' => $match->awayGoals,
+                    'played' => true,
+                    'updated_at' => now()
+                ]);
+                
+            // Takım istatistiklerini güncelle
+            $homeTeam->save();
+            $awayTeam->save();
+        }
+        
+        return response()->json(['success' => true]);
     }
 
     public function getStandings() {
-        $state = $this->loadState();
-        if (empty($state['fixturesGenerated']) || !$state['simulator']) {
-            return response()->json(['error' => 'Fikstür oluşturulmadı'], 400);
-        }
-        $sim = LeagueSimulatorService::fromArray($state['simulator']);
-        $standings = $sim->getStandings();
-        $weeksLeft = count($sim->fixtures) - $this->getPlayedWeeks($sim);
+        $teams = Team::orderBy('points', 'desc')
+            ->orderBy(DB::raw('goals_for - goals_against'), 'desc')
+            ->orderBy('goals_for', 'desc')
+            ->get();
+            
+        $weeksLeft = DB::table('fixtures')
+            ->where('played', false)
+            ->count() / 2; // Her haftada 2 maç olduğunu varsayıyoruz
+            
+        $sim = new LeagueSimulatorService($teams);
         $predictions = $sim->getChampionshipPredictions($weeksLeft);
+        
         return response()->json([
-            'standings' => array_map(fn($t) => $t->toArray(), $standings),
+            'standings' => $teams,
             'predictions' => $predictions
         ]);
     }
 
-    private function getPlayedWeeks($sim) {
-        $count = 0;
-        foreach ($sim->fixtures as $week) {
-            $played = true;
-            foreach ($week as $match) {
-                if (!$match->played) $played = false;
-            }
-            if ($played) $count++;
-        }
-        return $count;
-    }
-
     public function reset() {
-        $this->saveState([
-            'teams' => [],
-            'simulator' => null,
-            'fixturesGenerated' => false,
-        ]);
+        DB::transaction(function() {
+            // Tüm maçları sil
+            DB::table('fixtures')->truncate();
+            
+            // Tüm takımları sıfırla
+            Team::query()->update([
+                'points' => 0,
+                'played' => 0,
+                'won' => 0,
+                'drawn' => 0,
+                'lost' => 0,
+                'goals_for' => 0,
+                'goals_against' => 0
+            ]);
+        });
+        
         return response()->json(['success' => true]);
     }
 }
