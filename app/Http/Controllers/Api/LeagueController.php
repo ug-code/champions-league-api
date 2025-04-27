@@ -3,6 +3,8 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Http\Requests\AddTeamRequest;
+use App\Http\Requests\SimulateWeekRequest;
 use App\Models\Team;
 use App\Models\MatchGame;
 use App\Services\LeagueSimulatorService;
@@ -13,7 +15,7 @@ class LeagueController extends Controller
 {
 
 
-    public function addTeam(Request $request)
+    public function addTeam(AddTeamRequest $request)
     {
         $name  = $request->input('name');
         $power = (int)$request->input('power');
@@ -23,8 +25,7 @@ class LeagueController extends Controller
         $team->power = $power;
         $team->save();
 
-        return response()->json(['success' => true,
-                                 'teams'   => Team::all()]);
+        return response()->json(['success' => true, 'teams' => Team::all()]);
     }
 
     public function getTeams()
@@ -116,7 +117,7 @@ class LeagueController extends Controller
         return response()->json(['fixtures' => $allFixtures]);
     }
 
-    public function simulateWeek(Request $request)
+    public function simulateWeek(SimulateWeekRequest $request)
     {
         $week = (int)$request->input('week');
 
