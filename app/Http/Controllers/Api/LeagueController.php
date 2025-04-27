@@ -13,54 +13,58 @@ class LeagueController extends Controller
 {
 
 
-    public function addTeam(Request $request) {
-        $name = $request->input('name');
-        $power = (int) $request->input('power');
+    public function addTeam(Request $request)
+    {
+        $name  = $request->input('name');
+        $power = (int)$request->input('power');
 
-        $team = new Team();
-        $team->name = $name;
+        $team        = new Team();
+        $team->name  = $name;
         $team->power = $power;
         $team->save();
 
-        return response()->json(['success' => true, 'teams' => Team::all()]);
+        return response()->json(['success' => true,
+                                 'teams'   => Team::all()]);
     }
 
-    public function getTeams() {
+    public function getTeams()
+    {
         return response()->json(['teams' => Team::all()]);
     }
 
-    public function generateFixtures() {
+    public function generateFixtures()
+    {
         // Önceki fikstürleri sil
         DB::table('fixtures')->truncate();
 
         // Takımları sıfırla
         Team::query()->update([
-            'points' => 0,
-            'played' => 0,
-            'won' => 0,
-            'drawn' => 0,
-            'lost' => 0,
-            'goals_for' => 0,
+            'points'        => 0,
+            'played'        => 0,
+            'won'           => 0,
+            'drawn'         => 0,
+            'lost'          => 0,
+            'goals_for'     => 0,
             'goals_against' => 0
         ]);
 
         $teams = Team::all();
-        $sim = new LeagueSimulatorService($teams);
+        $sim   = new LeagueSimulatorService($teams);
         $sim->generateFixtures();
 
         // Fikstürleri veritabanına kaydet
-        DB::transaction(function() use ($sim) {
+        DB::transaction(function () use ($sim) {
             foreach ($sim->fixtures as $weekIndex => $week) {
                 foreach ($week as $match) {
                     DB::table('fixtures')->insert([
-                        'week' => $weekIndex + 1,
+                        'week'         => $weekIndex + 1,
                         'home_team_id' => $match->home->id,
                         'away_team_id' => $match->away->id,
-                        'home_goals' => $match->homeGoals,
-                        'away_goals' => $match->awayGoals,
-                        'played' => $match->played,
-                        'created_at' => now(),
-                        'updated_at' => now()
+                        'home_goals'   => $match->homeGoals,
+                        'away_goals'   => $match->awayGoals,
+                        'played'       => $match->played,
+                        'created_at'   => now(),
+                        'updated_at'   => now()
                     ]);
                 }
             }
@@ -71,39 +75,39 @@ class LeagueController extends Controller
             ->orderBy('week')
             ->get()
             ->groupBy('week')
-            ->map(function($weekFixtures, $weekNumber) use ($teams) {
+            ->map(function ($weekFixtures, $weekNumber) use ($teams) {
                 return [
-                    'week' => $weekNumber,
-                    'matches' => $weekFixtures->map(function($fixture) use ($teams) {
+                    'week'    => $weekNumber,
+                    'matches' => $weekFixtures->map(function ($fixture) use ($teams) {
                         $homeTeam = $teams->firstWhere('id', $fixture->home_team_id);
                         $awayTeam = $teams->firstWhere('id', $fixture->away_team_id);
 
                         return [
-                            'home' => [
-                                'name' => $homeTeam->name,
-                                'power' => $homeTeam->power,
-                                'points' => $homeTeam->points,
-                                'played' => $homeTeam->played,
-                                'won' => $homeTeam->won,
-                                'drawn' => $homeTeam->drawn,
-                                'lost' => $homeTeam->lost,
-                                'goalsFor' => $homeTeam->goals_for,
+                            'home'      => [
+                                'name'         => $homeTeam->name,
+                                'power'        => $homeTeam->power,
+                                'points'       => $homeTeam->points,
+                                'played'       => $homeTeam->played,
+                                'won'          => $homeTeam->won,
+                                'drawn'        => $homeTeam->drawn,
+                                'lost'         => $homeTeam->lost,
+                                'goalsFor'     => $homeTeam->goals_for,
                                 'goalsAgainst' => $homeTeam->goals_against
                             ],
-                            'away' => [
-                                'name' => $awayTeam->name,
-                                'power' => $awayTeam->power,
-                                'points' => $awayTeam->points,
-                                'played' => $awayTeam->played,
-                                'won' => $awayTeam->won,
-                                'drawn' => $awayTeam->drawn,
-                                'lost' => $awayTeam->lost,
-                                'goalsFor' => $awayTeam->goals_for,
+                            'away'      => [
+                                'name'         => $awayTeam->name,
+                                'power'        => $awayTeam->power,
+                                'points'       => $awayTeam->points,
+                                'played'       => $awayTeam->played,
+                                'won'          => $awayTeam->won,
+                                'drawn'        => $awayTeam->drawn,
+                                'lost'         => $awayTeam->lost,
+                                'goalsFor'     => $awayTeam->goals_for,
                                 'goalsAgainst' => $awayTeam->goals_against
                             ],
                             'homeGoals' => $fixture->home_goals,
                             'awayGoals' => $fixture->away_goals,
-                            'played' => $fixture->played
+                            'played'    => $fixture->played
                         ];
                     })->values()->all()
                 ];
@@ -112,8 +116,9 @@ class LeagueController extends Controller
         return response()->json(['fixtures' => $allFixtures]);
     }
 
-    public function simulateWeek(Request $request) {
-        $week = (int) $request->input('week');
+    public function simulateWeek(Request $request)
+    {
+        $week = (int)$request->input('week');
 
         // Haftanın maçlarını getir
         $fixtures = DB::table('fixtures')
@@ -126,7 +131,7 @@ class LeagueController extends Controller
         }
 
         $teams = Team::all();
-        $sim = new LeagueSimulatorService($teams);
+        $sim   = new LeagueSimulatorService($teams);
 
         // Maçları simüle et
         foreach ($fixtures as $fixture) {
@@ -142,7 +147,7 @@ class LeagueController extends Controller
                 ->update([
                     'home_goals' => $match->homeGoals,
                     'away_goals' => $match->awayGoals,
-                    'played' => true,
+                    'played'     => true,
                     'updated_at' => now()
                 ]);
 
@@ -156,39 +161,39 @@ class LeagueController extends Controller
             ->orderBy('week')
             ->get()
             ->groupBy('week')
-            ->map(function($weekFixtures, $weekNumber) use ($teams) {
+            ->map(function ($weekFixtures, $weekNumber) use ($teams) {
                 return [
-                    'week' => $weekNumber,
-                    'matches' => $weekFixtures->map(function($fixture) use ($teams) {
+                    'week'    => $weekNumber,
+                    'matches' => $weekFixtures->map(function ($fixture) use ($teams) {
                         $homeTeam = $teams->firstWhere('id', $fixture->home_team_id);
                         $awayTeam = $teams->firstWhere('id', $fixture->away_team_id);
 
                         return [
-                            'home' => [
-                                'name' => $homeTeam->name,
-                                'power' => $homeTeam->power,
-                                'points' => $homeTeam->points,
-                                'played' => $homeTeam->played,
-                                'won' => $homeTeam->won,
-                                'drawn' => $homeTeam->drawn,
-                                'lost' => $homeTeam->lost,
-                                'goalsFor' => $homeTeam->goals_for,
+                            'home'      => [
+                                'name'         => $homeTeam->name,
+                                'power'        => $homeTeam->power,
+                                'points'       => $homeTeam->points,
+                                'played'       => $homeTeam->played,
+                                'won'          => $homeTeam->won,
+                                'drawn'        => $homeTeam->drawn,
+                                'lost'         => $homeTeam->lost,
+                                'goalsFor'     => $homeTeam->goals_for,
                                 'goalsAgainst' => $homeTeam->goals_against
                             ],
-                            'away' => [
-                                'name' => $awayTeam->name,
-                                'power' => $awayTeam->power,
-                                'points' => $awayTeam->points,
-                                'played' => $awayTeam->played,
-                                'won' => $awayTeam->won,
-                                'drawn' => $awayTeam->drawn,
-                                'lost' => $awayTeam->lost,
-                                'goalsFor' => $awayTeam->goals_for,
+                            'away'      => [
+                                'name'         => $awayTeam->name,
+                                'power'        => $awayTeam->power,
+                                'points'       => $awayTeam->points,
+                                'played'       => $awayTeam->played,
+                                'won'          => $awayTeam->won,
+                                'drawn'        => $awayTeam->drawn,
+                                'lost'         => $awayTeam->lost,
+                                'goalsFor'     => $awayTeam->goals_for,
                                 'goalsAgainst' => $awayTeam->goals_against
                             ],
                             'homeGoals' => $fixture->home_goals,
                             'awayGoals' => $fixture->away_goals,
-                            'played' => $fixture->played
+                            'played'    => $fixture->played
                         ];
                     })->values()->all()
                 ];
@@ -197,9 +202,10 @@ class LeagueController extends Controller
         return response()->json(['fixtures' => $allFixtures]);
     }
 
-    public function simulateAll() {
+    public function simulateAll()
+    {
         $teams = Team::all();
-        $sim = new LeagueSimulatorService($teams);
+        $sim   = new LeagueSimulatorService($teams);
 
         // Tüm oynanmamış maçları getir
         $fixtures = DB::table('fixtures')
@@ -224,7 +230,7 @@ class LeagueController extends Controller
                 ->update([
                     'home_goals' => $match->homeGoals,
                     'away_goals' => $match->awayGoals,
-                    'played' => true,
+                    'played'     => true,
                     'updated_at' => now()
                 ]);
 
@@ -238,39 +244,39 @@ class LeagueController extends Controller
             ->orderBy('week')
             ->get()
             ->groupBy('week')
-            ->map(function($weekFixtures, $weekNumber) use ($teams) {
+            ->map(function ($weekFixtures, $weekNumber) use ($teams) {
                 return [
-                    'week' => $weekNumber,
-                    'matches' => $weekFixtures->map(function($fixture) use ($teams) {
+                    'week'    => $weekNumber,
+                    'matches' => $weekFixtures->map(function ($fixture) use ($teams) {
                         $homeTeam = $teams->firstWhere('id', $fixture->home_team_id);
                         $awayTeam = $teams->firstWhere('id', $fixture->away_team_id);
 
                         return [
-                            'home' => [
-                                'name' => $homeTeam->name,
-                                'power' => $homeTeam->power,
-                                'points' => $homeTeam->points,
-                                'played' => $homeTeam->played,
-                                'won' => $homeTeam->won,
-                                'drawn' => $homeTeam->drawn,
-                                'lost' => $homeTeam->lost,
-                                'goalsFor' => $homeTeam->goals_for,
+                            'home'      => [
+                                'name'         => $homeTeam->name,
+                                'power'        => $homeTeam->power,
+                                'points'       => $homeTeam->points,
+                                'played'       => $homeTeam->played,
+                                'won'          => $homeTeam->won,
+                                'drawn'        => $homeTeam->drawn,
+                                'lost'         => $homeTeam->lost,
+                                'goalsFor'     => $homeTeam->goals_for,
                                 'goalsAgainst' => $homeTeam->goals_against
                             ],
-                            'away' => [
-                                'name' => $awayTeam->name,
-                                'power' => $awayTeam->power,
-                                'points' => $awayTeam->points,
-                                'played' => $awayTeam->played,
-                                'won' => $awayTeam->won,
-                                'drawn' => $awayTeam->drawn,
-                                'lost' => $awayTeam->lost,
-                                'goalsFor' => $awayTeam->goals_for,
+                            'away'      => [
+                                'name'         => $awayTeam->name,
+                                'power'        => $awayTeam->power,
+                                'points'       => $awayTeam->points,
+                                'played'       => $awayTeam->played,
+                                'won'          => $awayTeam->won,
+                                'drawn'        => $awayTeam->drawn,
+                                'lost'         => $awayTeam->lost,
+                                'goalsFor'     => $awayTeam->goals_for,
                                 'goalsAgainst' => $awayTeam->goals_against
                             ],
                             'homeGoals' => $fixture->home_goals,
                             'awayGoals' => $fixture->away_goals,
-                            'played' => $fixture->played
+                            'played'    => $fixture->played
                         ];
                     })->values()->all()
                 ];
@@ -279,27 +285,29 @@ class LeagueController extends Controller
         return response()->json(['fixtures' => $allFixtures]);
     }
 
-    public function getStandings() {
+    public function getStandings()
+    {
         $teams = Team::orderBy('points', 'desc')
             ->orderBy(DB::raw('goals_for - goals_against'), 'desc')
             ->orderBy('goals_for', 'desc')
             ->get();
 
         $weeksLeft = DB::table('fixtures')
-            ->where('played', false)
-            ->count() / 2; // Her haftada 2 maç olduğunu varsayıyoruz
+                ->where('played', false)
+                ->count() / 2; // Her haftada 2 maç olduğunu varsayıyoruz
 
-        $sim = new LeagueSimulatorService($teams);
+        $sim         = new LeagueSimulatorService($teams);
         $predictions = $sim->getChampionshipPredictions($weeksLeft);
 
         return response()->json([
-            'standings' => $teams,
+            'standings'   => $teams,
             'predictions' => $predictions
         ]);
     }
 
-    public function reset() {
-        DB::transaction(function() {
+    public function reset()
+    {
+        DB::transaction(function () {
             // Tüm maçları sil
             DB::table('fixtures')->truncate();
             DB::table('teams')->truncate();
