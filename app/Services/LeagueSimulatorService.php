@@ -6,29 +6,33 @@ use App\Models\Team;
 use App\Models\MatchGame;
 use Illuminate\Support\Collection;
 
-class LeagueSimulatorService {
+class LeagueSimulatorService
+{
     public Collection $teams;
     public array $fixtures = [];
 
-    public function __construct($teams) {
+    private const HOME_ADVANTAGE = 1.1;
+    private const POINTS_FOR_WIN = 3;
+    private const POINTS_FOR_DRAW = 1;
+
+    public function __construct($teams)
+    {
         $this->teams = $teams instanceof Collection ? $teams : collect($teams);
     }
 
-    public function generateFixtures() {
+    public function generateFixtures()
+    {
         $n = $this->teams->count();
         $rounds = [];
-        
-        // Takımları array'e çevir
         $teams = $this->teams->values()->all();
-        
-        // Bay takımı oluştur
+
         if ($n % 2 !== 0) {
             $bayTeam = new Team();
             $bayTeam->name = 'Bay';
             $bayTeam->power = 0;
             $teams[] = $bayTeam;
         }
-        
+
         $totalRounds = (count($teams) - 1) * 2;
         $matchesPerRound = count($teams) / 2;
 
@@ -38,10 +42,10 @@ class LeagueSimulatorService {
                 $homeIdx = ($round + $i) % (count($teams) - 1);
                 $awayIdx = (count($teams) - 1 - $i + $round) % (count($teams) - 1);
                 if ($i === 0) $awayIdx = count($teams) - 1;
-                
+
                 $home = $teams[$homeIdx];
                 $away = $teams[$awayIdx];
-                
+
                 if ($round < $totalRounds / 2) {
                     $roundMatches[] = new MatchGame($home, $away);
                 } else {
@@ -53,9 +57,9 @@ class LeagueSimulatorService {
         $this->fixtures = $rounds;
     }
 
-    public function simulateMatch($match) {
-        $homeAdv = 1.1;
-        $homePower = $match->home->power * $homeAdv;
+    public function simulateMatch($match)
+    {
+        $homePower = $match->home->power * self::HOME_ADVANTAGE;
         $awayPower = $match->away->power;
         $totalPower = $homePower + $awayPower;
         $homeProb = $homePower / $totalPower;
@@ -71,49 +75,55 @@ class LeagueSimulatorService {
         $match->home->goals_against += $awayGoals;
         $match->away->goals_for += $awayGoals;
         $match->away->goals_against += $homeGoals;
+
         if ($homeGoals > $awayGoals) {
             $match->home->won++;
-            $match->home->points += 3;
+            $match->home->points += self::POINTS_FOR_WIN;
             $match->away->lost++;
         } elseif ($homeGoals < $awayGoals) {
             $match->away->won++;
-            $match->away->points += 3;
+            $match->away->points += self::POINTS_FOR_WIN;
             $match->home->lost++;
         } else {
             $match->home->drawn++;
             $match->away->drawn++;
-            $match->home->points++;
-            $match->away->points++;
+            $match->home->points += self::POINTS_FOR_DRAW;
+            $match->away->points += self::POINTS_FOR_DRAW;
         }
     }
 
-    public function randomGoal($prob) {
+    public function randomGoal($prob)
+    {
         $r = mt_rand() / mt_getrandmax();
         if ($r < $prob * 0.5) return 2 + mt_rand() / mt_getrandmax();
         if ($r < $prob) return 1 + mt_rand() / mt_getrandmax();
         return mt_rand() / mt_getrandmax();
     }
 
-    public function simulateWeek($week) {
+    public function simulateWeek($week)
+    {
         if (!isset($this->fixtures[$week])) return;
         foreach ($this->fixtures[$week] as $match) {
             if (!$match->played) $this->simulateMatch($match);
         }
     }
 
-    public function simulateAll() {
+    public function simulateAll()
+    {
         for ($i = 0; $i < count($this->fixtures); $i++) {
             $this->simulateWeek($i);
         }
     }
 
-    public function getStandings() {
+    public function getStandings()
+    {
         return $this->teams->sortByDesc(function($team) {
             return [$team->points, $team->goalDifference(), $team->goals_for];
         })->values();
     }
 
-    public function getChampionshipPredictions($weeksLeft) {
+    public function getChampionshipPredictions($weeksLeft)
+    {
         $standings = $this->getStandings();
         $maxPoint = $standings->first()->points;
         $predictions = [];
@@ -122,7 +132,7 @@ class LeagueSimulatorService {
                 $predictions[] = $team->points === $maxPoint ? 100 : 0;
                 continue;
             }
-            $possibleMax = $team->points + $weeksLeft * 3;
+            $possibleMax = $team->points + $weeksLeft * self::POINTS_FOR_WIN;
             $isStillPossible = $possibleMax >= $maxPoint;
             if (!$isStillPossible) {
                 $predictions[] = 0;
@@ -133,7 +143,8 @@ class LeagueSimulatorService {
         return $predictions;
     }
 
-    public static function fromArray($arr) {
+    public static function fromArray($arr)
+    {
         $teams = collect($arr['teams'])->map(function($t) {
             return Team::fromArray($t);
         });
@@ -159,10 +170,11 @@ class LeagueSimulatorService {
         return $sim;
     }
 
-    public function toArray() {
+    public function toArray()
+    {
         return [
             'teams' => $this->teams->map(fn($t) => $t->toArray())->toArray(),
             'fixtures' => array_map(fn($w) => array_map(fn($m) => $m->toArray(), $w), $this->fixtures),
         ];
     }
-} 
+}
