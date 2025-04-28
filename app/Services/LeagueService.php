@@ -4,7 +4,6 @@ namespace App\Services;
 
 use App\Repositories\FixtureRepository;
 use App\Repositories\TeamRepository;
-use App\Services\LeagueSimulatorService;
 use App\Models\MatchGame;
 use Illuminate\Support\Facades\DB;
 

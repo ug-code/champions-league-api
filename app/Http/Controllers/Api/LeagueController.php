@@ -6,7 +6,6 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\AddTeamRequest;
 use App\Http\Requests\SimulateWeekRequest;
 use App\Services\LeagueService;
-use Illuminate\Http\Request;
 
 class LeagueController extends Controller
 {
@@ -19,7 +18,7 @@ class LeagueController extends Controller
 
     public function addTeam(AddTeamRequest $request)
     {
-        $data = $request->only('name', 'power');
+        $data  = $request->only('name', 'power');
         $teams = $this->leagueService->addTeam($data);
 
         return response()->json([
@@ -48,7 +47,7 @@ class LeagueController extends Controller
 
     public function simulateWeek(SimulateWeekRequest $request)
     {
-        $week = (int) $request->input('week');
+        $week     = (int)$request->input('week');
         $fixtures = $this->leagueService->simulateWeek($week);
 
         if (is_null($fixtures)) {
