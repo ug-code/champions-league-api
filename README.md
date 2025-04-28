@@ -48,7 +48,7 @@ http://127.0.0.1:8000/api/teams
 - `GET /api/teams` - Takımları listele
 - `POST /api/fixtures` - Fikstür oluştur
 - `POST /api/simulate-week` - Haftayı simüle et
-  - Body: `{ "week": 0 }`
+  - Body: `{ "week": 1 }`
 - `POST /api/simulate-all` - Tüm ligi simüle et
 - `GET /api/standings` - Lig tablosu ve tahminler
 - `POST /api/reset` - Sıfırla
@@ -58,15 +58,37 @@ http://127.0.0.1:8000/api/teams
 ```
 api/
 ├── app/
-│   └── Http/
-│       └── Controllers/
-│           └── Api/
-│               └── LeagueController.php  # Ana controller
+│   ├── Http/
+│   │   └── Controllers/
+│   │       └── Api/
+│   │           └── LeagueController.php      # Ana controller
+│   │   └── Models/
+│   │       ├── Team.php                         # Takım modeli
+│   │       ├── MatchGame.php                    # Maç modeli
+│   │       └── Fixture.php                      # Fikstür modeli
+│   │   └── Repositories/
+│   │       ├── TeamRepository.php               # Takım repository'si
+│   │       ├── FixtureRepository.php            # Fikstür repository'si
+│   │       └── Interfaces/                      # Repository arayüzleri
+│   │   └── Services/
+│   │       ├── LeagueService.php                # Lig işlemleri servisi
+│   │       └── LeagueSimulatorService.php       # Simülasyon servisi
+│   └── Providers/
+│       └── AppServiceProvider.php           # Servis sağlayıcı
 ├── routes/
-│   └── api.php                          # API route'ları
-└── storage/
-    └── app/
-        └── league.json                  # State dosyası
+│   ├── api.php                              # API route'ları
+│   ├── web.php                              # Web route'ları
+│   └── console.php                          # Konsol komutları
+├── database/
+│   ├── migrations/                          # Migration dosyaları
+│   ├── seeders/                             # Seeder dosyaları
+│   └── factories/                           # Factory dosyaları
+├── tests/
+│   ├── Unit/                                # Birim testler
+│   ├── Feature/                             # Feature testler
+│   └── TestCase.php                         # Test case
+└── public/
+    └── index.php                            # Giriş noktası
 ```
 
 ## 🧮 Hesaplama Formülleri
@@ -149,7 +171,6 @@ $prediction = round(($team->points / ($maxPoint ?: 1)) * 100);
 
 ## 📝 Notlar
 
-- Veritabanı kullanılmıyor, tüm state `storage/app/league.json` dosyasında tutuluyor
 - Her API isteğinde state dosyası okunup güncelleniyor
 - Takım güçleri 1-100 arası
 - Ev sahibi avantajı %10
@@ -160,11 +181,7 @@ $prediction = round(($team->points / ($maxPoint ?: 1)) * 100);
 1. Yeni endpoint eklemek için:
    - `routes/api.php`'ye route ekleyin
    - `LeagueController.php`'ye method ekleyin
-   - State yönetimini `league.json` üzerinden yapın
-
-2. State yönetimi:
-   - `loadState()` - JSON dosyasından state'i oku
-   - `saveState()` - State'i JSON dosyasına yaz
+   - **PostgreSQL veritabanı yönetimi** üzerinden yapın
 
 ## 🤝 Katkıda Bulunma
 
@@ -177,3 +194,24 @@ $prediction = round(($team->points / ($maxPoint ?: 1)) * 100);
 ## 📄 Lisans
 
 MIT License - Detaylar için [LICENSE](LICENSE) dosyasına bakın.
+
+- Birim testler eklendi.
+php artisan test
+
+## 🗄️ Veritabanı Tablo İsimleri
+
+Kullanılan başlıca veritabanı tabloları:
+
+- `teams` : Takımların tutulduğu ana tablo
+- `fixtures` : Fikstür ve maçlar
+
+
+## 🛠️ Migration Nasıl Çalıştırılır?
+
+Migration dosyalarını çalıştırmak için aşağıdaki komutu kullanabilirsiniz:
+
+```bash
+cmd /c php artisan migrate
+```
+
+Bu komut, veritabanınızda gerekli tüm tabloları oluşturacaktır.
