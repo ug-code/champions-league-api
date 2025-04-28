@@ -2,6 +2,13 @@
 
 Bu proje, Şampiyonlar Ligi simülasyonunun backend API kısmını içerir. Laravel ile geliştirilmiş, memory-based bir API'dir.
 
+Demo link:
+https://champions-league-fe.vercel.app/
+
+BE swagger
+https://champions-league-api-2025.koyeb.app/request-docs
+
+
 ## 🚀 Kullanılan Teknolojiler
 
 - **Laravel 12** - PHP framework
